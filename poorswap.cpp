@@ -1,9 +1,12 @@
 #include <eosiolib/eosio.hpp>
-#include <eosiolib/currency.hpp>
+#include <eosiolib/asset.hpp>
 #include <eosiolib/singleton.hpp>
 
 using namespace eosio;
 using std::string;
+
+//THANKS TO NSJAMES FOR THE ORIGINAL OPENSOURCE CODE
+//YOU THE BEST MAN AND I LOVE YOU <3
 
 class poorswap : contract {
 private:
@@ -37,6 +40,13 @@ private:
         EOSLIB_SERIALIZE( settings, (setting) )
     };
 
+    struct transfer_args {
+            account_name  from;
+            account_name  to;
+            asset         quantity;
+            string        memo;
+         };
+
 
 
     typedef multi_index<N(claimables), CycleData>    Claimables;
@@ -48,7 +58,7 @@ private:
 
     int64_t getCurrentCycle(){
         int64_t startTime = Settings(_self, N("started")).get().setting;
-        return ((now() - startTime) / 3600) / 24;
+        return ((now() - startTime) / (24*3600)); //24*3600 for prod, 180 for testing (2 minutes)
     }
 
     CycleData getCycleData(int64_t cycle){
@@ -65,7 +75,7 @@ private:
 
 public:
     using contract::contract;
-    scatterfunds( name self ) : contract(self){}
+    poorswap( name self ) : contract(self){}
 
     // @abi action
     void start(){
@@ -115,18 +125,17 @@ public:
     /***                                        ***/
     /**********************************************/
 
-    void buy( const currency::transfer& t ){
+    void buy( const transfer_args& t ){
       if( t.to == _self ) {
         eosio_assert(t.quantity.symbol == string_to_symbol(4, "POOR"), "Token must be POOR");
         eosio_assert(t.quantity.is_valid(), "Token asset is not valid");
         eosio_assert(t.quantity.amount >= 1'0000, "Not enough tokens");
 
         int64_t cycle(getCurrentCycle());
-        eosio_assert(cycle <= lastCycle, "3 years have passed, this development fundraiser is over.");
+        eosio_assert(cycle <= lastCycle, "3 years have passed, this promotion fundraiser is over.");
 
         CycleData cycleData = getCycleData(cycle);
         asset total = cycleData.tokens;
-        eosio_assert(total < maxEosPerCycle(), "Too much has been spent today");
 
         asset quantity = t.quantity;
         setCycleData(cycle, total + quantity);
@@ -145,7 +154,7 @@ public:
 
     void apply( account_name contract, account_name action ) {
         if( contract == N(poormantoken) && action == N(transfer) ) {
-            buy( unpack_action_data<eosio::currency::transfer>() );
+            buy( unpack_action_data<transfer_args>() );
             return;
         }
 
@@ -156,17 +165,15 @@ public:
         if( contract != _self ) return;
         auto& thiscontract = *this;
         switch( action ) {
-            EOSIO_API( scatterfunds, (start)(claim) )
+            EOSIO_API( poorswap, (start)(claim) )
         };
     }
-
-
 
 };
 
 extern "C" {
     [[noreturn]] void apply( uint64_t receiver, uint64_t code, uint64_t action ) {
-        scatterfunds c( receiver );
+        poorswap c( receiver );
         c.apply( code, action );
         eosio_exit(0);
     }
