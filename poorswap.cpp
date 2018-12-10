@@ -50,9 +50,8 @@ private:
 
 
     typedef multi_index<N(claimables), CycleData>    Claimables;
-    typedef singleton<  N(cycles),     CycleData>    Cycles;
+    typedef multi_index<N(cycles),     CycleData>    Cycles;
     typedef singleton<  N(settings),   settings>     Settings;
-
 
 
 
@@ -62,15 +61,28 @@ private:
     }
 
     CycleData getCycleData(int64_t cycle){
-        Cycles cycles(_self, cycle);
-        return cycles.get_or_default(CycleData{cycle, asset(0'0000, string_to_symbol(4, "POOR"))});
+        Cycles cycles(_self, _self);
+        auto itr = cycles.find(cycle);
+        if(itr == cycles.end()) {
+          return CycleData{cycle, asset(0'0000, string_to_symbol(4, "POOR"))};
+        } else {
+          return CycleData{itr->cycle, itr->tokens};
+        }
     }
 
-    void setCycleData(int64_t cycle, asset quantity){
-        Cycles cycles(_self, cycle);
-        CycleData cycleData = getCycleData(cycle);
-        cycleData.tokens = quantity;
-        cycles.set(cycleData, _self);
+    void setCycleData(int64_t cycle, asset quantity) {
+        Cycles cycles(_self, _self);
+        auto itr = cycles.find(cycle);
+        if(itr == cycles.end()) {
+          cycles.emplace(_self, [&](auto& row){
+            row.cycle = cycle;
+            row.tokens = quantity;
+          });
+        } else {
+          cycles.modify(itr, 0, [&](auto& row){
+            row.tokens = quantity;
+          });
+        }
     }
 
 public:
